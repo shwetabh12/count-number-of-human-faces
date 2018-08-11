@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""
+👪👫 Piplcount
+
+Count how many humans are in the scene (from cam feed, video or picture).
+"""
+import cv2
+import fire
+
+from filters.smooth import Smoothers
+from classifiers.cascade import Classifiers
+
+class PiplCount(Smoothers, Classifiers):
+    """
+    Methods for image capture
+    """
+    _max_width = 1280
+    _max_height = 720
+
+    @classmethod
+    def _face_mark(cls, image, smoother):
+        """
+        Return the location of detected face
+
+        Parameters
+        ----------
+        image: numpy.ndarray
+            A frame to process, as an image
+        smoother
+
+        smoother: str
+            Which one can choose the noise
+            reduction algorithm. Can be "fast" and
+            "best"
+        """
+        if smoother == 'fast':
+            smoother_algorithm = cls._fast_smoother
+        elif smoother == 'best':
+            smoother_algorithm = cls._best_smoother
+       
+
+        image = smoother_algorithm(
+            cv2.cvtColor(
+                image,
+                cv2.COLOR_BGR2GRAY
+            )
+        )
+
+        return cls._detect_face(image)
+
+    @classmethod
+    def stream(cls, source='webcam', smoother='best'):
+        """
+        Initiates the stream and watch a key
+        that stops the stream
+        """
+        if source == 'webcam':
+            source = 0
+
+        video_capture = cv2.VideoCapture(source)
+
+        video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, cls._max_width)
+        video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, cls._max_height)
+
+        while True:
+            _, frame = video_capture.read()
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                cv2.destroyAllWindows()
+                break
+
+            face_positions = cls._face_mark(frame, smoother)
+
+            for position_x, position_y, width, height in face_positions:
+                if position_y - 10 <= 0:
+                    text_position_y = position_y + 10
+                else:
+                    text_position_y = position_y - 10
+
+                cv2.putText(
+                    frame,
+                    'Frontal Face',
+                    (position_x, text_position_y),
+                    cv2.FONT_HERSHEY_DUPLEX,
+                    width / 200,
+                    (250, 240, 237),
+                    1
+                )
+
+                cv2.rectangle(
+                    frame,
+                    (position_x, position_y),
+                    (position_x + height, position_y + height),
+                    (0, 127, 255),
+                    2
+                )
+
+            width_stream = video_capture.get(cv2.CAP_PROP_FRAME_WIDTH)
+            height_stream = video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+            stream_bottom_center = (int(width_stream / 2) - 260, int(height_stream) - 10)
+
+            cv2.putText(
+                frame,
+                'Total number of frontal faces: {}'.format(len(face_positions)),
+                stream_bottom_center,
+                cv2.FONT_HERSHEY_DUPLEX,
+                1,
+                (10, 240, 0),
+                2
+            )
+
+            cv2.imshow('Piplcount', frame)
+
+        video_capture.release()
+
+if __name__ == '__main__':
+    fire.Fire(PiplCount)
